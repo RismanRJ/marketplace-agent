@@ -18,6 +18,5 @@
     "ecommerce",
     "sp-api",
     "ab-testing"
-  ],
-  "hooks": "./hooks/hooks.json"
+  ]
 }

@@ -1,7 +1,7 @@
 {
   "name": "marketplace-agent",
   "displayName": "Marketplace Agent",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Largely autonomous marketplace operations for Amazon and Flipkart: image A/B testing with an approval gate, reviewed bid and budget optimisation, listing and price updates, and a shareable unified dashboard.",
   "author": {
     "name": "RismanRJ",

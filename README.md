@@ -5,8 +5,8 @@ image A/B testing, catalog mutations, reviewed bid optimisation, and unified tel
 
 ## Setup
 
-Nine steps, zero to first live run. Steps 1-4 take a few minutes; 5-8 are the real work and need
-accounts and credentials you may not have yet. **Do not skip 8.**
+Eight steps, zero to first live run. Steps 1-4 take a few minutes; 5-7 are the real work and need
+accounts and credentials you may not have yet. **Do not skip 7.**
 
 ### 1. Install the plugin
 
@@ -55,34 +55,56 @@ want managed, and review every value in `defaults` — especially `max_bid_chang
 `bid_ceiling`, `cooldown_hours` and `max_changes_per_run`, which together bound how much damage one
 run can do. A SKU not listed here is out of scope and will be ignored.
 
-### 5. Set credentials
+### 5. Give the plugin Amazon (and Flipkart) access
 
-Environment variables only — see [Credentials](#credentials) for the full table and, for unattended
-runs, the Secrets Manager pattern. Then check them without printing any value:
+There are **two independent ways** to reach each Amazon API, and the plugin supports both. They mix
+per-API — e.g. Path A (connector) for Ads and Path B (refresh token) for SP-API is fine.
+
+| | Path A — MCP / Claude Connectors | Path B — refresh tokens (`mp_api.py`) |
+|---|---|---|
+| How | Seller Central / Amazon OAuth in the browser | LWA refresh token in an env var |
+| Credential lives | Claude's connector store | Process environment |
+| Setup time | Minutes | A developer-application approval, can take days |
+| Best when | Available for your marketplace | Headless/unattended runs, or any marketplace |
+
+**Path A, minimum steps** — Ads via custom connector (Amazon requires your own approved LWA app,
+so the generic form below is not enough for Ads):
+
+1. Claude → Settings → Connectors → **+ Add custom connector**
+2. Enter the official Amazon Ads MCP server URL for your region
+3. Authentication: **Sign in now**; OAuth client: **Use your own OAuth client**
+4. Enter your LWA Client ID + Secret → Connect → authorize
+
+A plain `claude mcp add --transport http amazon-ads <url>` may work instead for a server that
+accepts generic OAuth, but it is not the documented route for Amazon's own Ads MCP server. For
+SP-API, Path A is just Claude → Settings → Connectors → search **Amazon Selling Partner** → Connect
+→ sign in with your own Seller Central login (no Client ID/Secret entered at all).
+
+**Path B, minimum steps** — obtain an LWA refresh token per API (SP-API, Ads) via Seller
+Central/Developer Console OAuth, then set it as an env var (`AMAZON_LWA_REFRESH_TOKEN`,
+`AMAZON_ADS_REFRESH_TOKEN` — full table in [Credentials](#credentials)).
+
+Full step-by-step for both paths, owner-vs-operator responsibilities, and troubleshooting:
+[docs/amazon-access.md](docs/amazon-access.md).
+
+Whichever path(s) you use, check Path B credentials without printing any value:
 
 ```bash
 python3 "$CLAUDE_PLUGIN_ROOT/scripts/mp_api.py" check-credentials
 ```
 
 It reports each channel as `ok`, `warn`, `expired` or `unconfigured`, naming only missing variable
-*names*. A channel you leave unconfigured is simply skipped, so you can start with one.
+*names*. **This only checks Path B (env-var) credentials** — a channel served by a connector has no
+env vars to find and will correctly show as `unconfigured` here; that is expected, not an error.
 
-### 6. Connect the Amazon Ads MCP server
+Flipkart is unaffected by any of this — it has no MCP option and always uses Path B.
 
-```bash
-claude mcp add --transport http amazon-ads https://advertising-ai-eu.amazon.com/mcp
-```
-
-See [Amazon Ads MCP server](#amazon-ads-mcp-server-preferred-transport-for-ads) for region choice
-(**EU for amazon.in**, not FE) and the prerequisite Ads API developer application. Skip this and the
-`amazon-ads` skill falls back to the HTTP path, which still works.
-
-### 7. Image A/B testing — optional, two separate prerequisites
+### 6. Image A/B testing — optional, two separate prerequisites
 
 Skip this whole step if you only want ads and pricing; both work fine without it. The image
 pipeline needs **generation** and **hosting**, and they fail independently.
 
-**7a. Image generation — needs a *billed* Gemini key.** The pipeline generates variants through the
+**6a. Image generation — needs a *billed* Gemini key.** The pipeline generates variants through the
 `ask-gemini` MCP server (`mcp__ask-gemini__generate_image`). Connect it if you have not:
 
 ```bash
@@ -104,14 +126,14 @@ Enable billing on the Google Cloud project behind the key at
 account. Verify with one generation before relying on it. The pipeline treats `limit: 0` as a hard
 stop: it records a blocker and continues with ads and pricing rather than looping on a quota error.
 
-**7b. Image hosting — not implemented for you.** Amazon's crawler fetches images from a public URL;
+**6b. Image hosting — not implemented for you.** Amazon's crawler fetches images from a public URL;
 there is no upload endpoint. See [Not yet wired: image hosting](#not-yet-wired-image-hosting).
 Until you wire it, the pipeline stops at the hosting gate and records a blocker instead of
 pretending to succeed.
 
 Both must be working for image A/B testing to complete end to end.
 
-### 8. Dry-run a full cycle — do not skip this
+### 7. Dry-run a full cycle — do not skip this
 
 ```
 /marketplace-agent:marketplace-run --dry-run
@@ -122,7 +144,7 @@ report end to end and confirm the bid changes it *would* make are ones you would
 This is the last checkpoint before the agent spends real money, and nothing in this plugin has ever
 run against a live account — see [Known gaps](#known-gaps-read-before-trusting-this-in-production).
 
-### 9. Go live
+### 8. Go live
 
 ```
 /marketplace-agent:marketplace-run
@@ -135,20 +157,29 @@ Two things to know before you walk away:
 - **Undo.** `/marketplace-agent:marketplace-rollback` reverts a run using the `before` values in
   `analytics/audit/`. Every applied change records one, so rollback is mechanical.
 
-For unattended operation, run step 9 on a schedule. The lock prevents overlapping runs, cooldowns
+For unattended operation, run step 8 on a schedule. The lock prevents overlapping runs, cooldowns
 prevent the same entity being adjusted repeatedly, and `HALT` stops everything.
 
 ## Amazon Ads MCP server (preferred transport for ads)
 
 Amazon's official Ads MCP server is a **remote HTTP server** in open beta. Connect it once and
-`amazon-ads` will prefer it over the HTTP script:
+`amazon-ads` will prefer it over the HTTP script.
+
+**Connect it through Claude → Settings → Connectors → + Add custom connector**, choosing
+Authentication "Sign in now" and OAuth client **"Use your own OAuth client"**, then entering the
+LWA Client ID and Secret from your approved Ads API application. Amazon requires you to use your
+own LWA app, which is why the generic CLI form:
 
 ```bash
 claude mcp add --transport http amazon-ads https://advertising-ai-eu.amazon.com/mcp
 ```
 
+may fail at the authorization step — it cannot supply your Client ID/Secret. Full steps, including
+what the account Owner must do first, are in [docs/amazon-access.md](docs/amazon-access.md).
+
 Regional endpoints: `advertising-ai.amazon.com` (NA), `advertising-ai-eu.amazon.com` (EU),
-`advertising-ai-fe.amazon.com` (FE). Auth is an OAuth browser flow on first connect.
+`advertising-ai-fe.amazon.com` (FE). Use the exact official endpoint for your account and region;
+never substitute a third-party MCP endpoint when an official one exists.
 
 > **Pick the right region.** For **amazon.in, use the EU host.** Amazon's classic Ads API has
 > historically served India from EU, while FE is Japan/Australia/Singapore. India is not named
@@ -163,9 +194,13 @@ MCP server sits on top of that; it does not replace the approval process.
 The server is in beta, its rate limits are undocumented, and it can delete campaigns — the plugin
 only ever adjusts bids and budgets within caps, and every change still passes `bid-reviewer`.
 
-**Selling Partner (listings/catalog):** Amazon's Selling Partner MCP connector
-(`sellingpartner-ai.amazon.com/mcp`) is **US stores only** in beta, so it does not cover amazon.in.
-`amazon-sp` therefore stays on the HTTP path below.
+**Selling Partner (listings/catalog)** has its own official connector
+(`sellingpartner-ai.amazon.com/mcp`), connected from Claude → Settings → Connectors by searching
+**Amazon Selling Partner**. Unlike the Ads connector it needs no Client ID or Secret — it is a plain
+Seller Central OAuth login with the account the Owner authorized. Amazon's launch post described it
+as available for U.S. stores first with international expansion to follow, and does not name
+amazon.in either way, so attempt the connection and fall back to the refresh-token path if your
+marketplace is not offered. See [docs/amazon-access.md](docs/amazon-access.md).
 
 ## Credentials
 
@@ -276,6 +311,7 @@ Flipkart needs none of this — its images cannot be set through any API.
 | `scripts/image_check.py` | Deterministic pixel compliance |
 | `scripts/dashboard.py` | Unified telemetry HTML |
 | `hooks/protect_raw.sh` | Blocks writes to `assets/raw/` and credential reads |
+| `docs/amazon-access.md` | Two-path Amazon access guide — MCP/Connectors vs. refresh tokens, full setup steps |
 
 Every script has a `selfcheck` subcommand that runs offline:
 

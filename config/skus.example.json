@@ -1,0 +1,41 @@
+{
+  "defaults": {
+    "target_acos_pct": 25.0,
+    "min_impressions": 1000,
+    "max_bid_change_pct": 15.0,
+    "max_budget_change_pct": 15.0,
+    "bid_floor": 0.15,
+    "bid_ceiling": 5.0,
+    "cooldown_hours": 72,
+    "max_changes_per_run": 25,
+    "ab_min_impressions_per_variant": 5000,
+    "ab_min_days": 7,
+    "image_amazon_min_edge_px": 1600,
+    "image_amazon_min_occupancy_pct": 85,
+    "image_amazon_min_bg_white_pct": 95,
+    "image_flipkart_min_edge_px": 500,
+    "image_flipkart_recommended_edge_px": 1000,
+    "image_flipkart_min_bg_uniformity_pct": 90.0,
+    "publish_dashboard": true
+  },
+  "skus": [
+    {
+      "sku": "DEMO-TSHIRT-BLK-M",
+      "channel": "amazon",
+      "marketplace_id": "A21TJRUUN4KGV",
+      "campaign_ids": [
+        "amzn-camp-10234"
+      ],
+      "target_acos_pct": 20.0
+    },
+    {
+      "sku": "DEMO-JEANS-BLU-32",
+      "channel": "flipkart",
+      "marketplace_id": "FLIPKART_IN",
+      "campaign_ids": [
+        "fk-camp-5521"
+      ],
+      "target_acos_pct": 22.5
+    }
+  ]
+}

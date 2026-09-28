@@ -1,0 +1,50 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install runtime deps
+        run: pip install requests Pillow
+
+      - name: Script selfchecks
+        env:
+          CLAUDE_PROJECT_DIR: ${{ github.workspace }}
+        run: |
+          for s in mp_api mp_state image_check dashboard; do
+            echo "--- $s ---"
+            python3 "scripts/$s.py" selfcheck
+          done
+
+      - name: Hook guard behaves
+        run: |
+          set -e
+          chmod +x hooks/protect_raw.sh
+          bash -n hooks/protect_raw.sh
+          assert() { # $1=expected $2=json
+            if printf '%s' "$2" | ./hooks/protect_raw.sh >/dev/null 2>&1; then r=ALLOW; else r=BLOCK; fi
+            [ "$r" = "$1" ] || { echo "FAIL expected $1 got $r for: $2"; exit 1; }
+          }
+          assert BLOCK '{"tool_name":"Write","tool_input":{"file_path":"assets/raw/a.jpg"}}'
+          assert ALLOW '{"tool_name":"Write","tool_input":{"file_path":"assets/approved/raw-look.jpg"}}'
+          assert BLOCK '{"tool_name":"Bash","tool_input":{"command":"cat .env"}}'
+          assert BLOCK '{"tool_name":"Bash","tool_input":{"command":"printenv"}}'
+          assert BLOCK '{"tool_name":"Bash","tool_input":{"command":"echo $FLIPKART_APP_SECRET"}}'
+          assert ALLOW '{"tool_name":"Bash","tool_input":{"command":"python3 scripts/mp_api.py selfcheck"}}'
+          echo "hook guard ok"
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Validate plugin and marketplace manifests
+        run: claude plugin validate . --strict

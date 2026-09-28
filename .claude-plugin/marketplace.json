@@ -1,0 +1,23 @@
+{
+  "name": "rismanrj-plugins",
+  "owner": {
+    "name": "RismanRJ",
+    "url": "https://github.com/RismanRJ"
+  },
+  "description": "Personal Claude Code plugins.",
+  "plugins": [
+    {
+      "name": "marketplace-agent",
+      "source": "./",
+      "description": "Largely autonomous Amazon and Flipkart marketplace operations: image A/B testing with an approval gate, reviewed bid and budget optimisation, listing and price updates, and a shareable unified dashboard.",
+      "category": "ecommerce",
+      "tags": [
+        "amazon",
+        "flipkart",
+        "advertising",
+        "sp-api",
+        "ab-testing"
+      ]
+    }
+  ]
+}

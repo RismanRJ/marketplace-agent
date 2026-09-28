@@ -3,7 +3,12 @@
 A Claude Code plugin for largely autonomous Amazon + Flipkart listing and advertising management:
 image A/B testing, catalog mutations, reviewed bid optimisation, and unified telemetry.
 
-## Install
+## Setup
+
+Nine steps, zero to first live run. Steps 1-4 take a few minutes; 5-8 are the real work and need
+accounts and credentials you may not have yet. **Do not skip 8.**
+
+### 1. Install the plugin
 
 ```bash
 claude plugin marketplace add RismanRJ/marketplace-agent
@@ -11,32 +16,100 @@ claude plugin install marketplace-agent@rismanrj-plugins
 ```
 
 The repo is both the plugin and its marketplace, so that one repo is all you need. It is private —
-you need read access and working git credentials.
+you need read access and working git credentials (a `gh auth login` is enough).
 
-Or run it straight from a checkout, without installing:
+Or run it from a checkout without installing: `claude --plugin-dir ./marketplace-agent`.
+
+Verify it actually loaded — `validate` checks structure, not loading:
 
 ```bash
-claude --plugin-dir ./marketplace-agent
-claude plugin validate ./marketplace-agent --strict
+claude plugin list        # expect: marketplace-agent@rismanrj-plugins  ✔ enabled
 ```
 
-**First-time setup:** in the directory you want the agent to work in, run
-`/marketplace-agent:marketplace-init`. It scaffolds the directory tree, `config/skus.json` and
-`CLAUDE.md`, runs every script's selfcheck, and reports which credentials are unset. It never
-overwrites an existing config, so it is safe to re-run.
-
-Operational directives live in `CLAUDE.md` at your **project** root — `marketplace-init` puts it
-there from `templates/CLAUDE.md` (a `CLAUDE.md` inside a plugin is not loaded). Read it before
-running anything.
-
-## Dependencies
+### 2. Install the Python dependencies
 
 ```bash
 pip install requests Pillow
 ```
 
-`requests` is used by `mp_api.py`, `Pillow` by `image_check.py`. `mp_state.py` and `dashboard.py` are
-stdlib-only.
+`requests` is used by `mp_api.py`, `Pillow` by `image_check.py`. `mp_state.py` and `dashboard.py`
+are stdlib-only.
+
+### 3. Scaffold your working directory
+
+```bash
+mkdir ~/marketplace && cd ~/marketplace
+```
+
+Then run `/marketplace-agent:marketplace-init`. It creates the directory tree, copies
+`config/skus.json` and `CLAUDE.md` into place, runs every script's selfcheck, and reports which
+credentials are unset. It never overwrites an existing config, so it is safe to re-run.
+
+Operational directives live in `CLAUDE.md` at your **project** root (a `CLAUDE.md` inside a plugin
+is not loaded). **Read it before running anything** — it holds the autonomy boundary.
+
+### 4. Put your SKUs and thresholds in `config/skus.json`
+
+This is the single source of truth. Nothing is hardcoded anywhere else. Set the SKUs you actually
+want managed, and review every value in `defaults` — especially `max_bid_change_pct`, `bid_floor`,
+`bid_ceiling`, `cooldown_hours` and `max_changes_per_run`, which together bound how much damage one
+run can do. A SKU not listed here is out of scope and will be ignored.
+
+### 5. Set credentials
+
+Environment variables only — see [Credentials](#credentials) for the full table and, for unattended
+runs, the Secrets Manager pattern. Then check them without printing any value:
+
+```bash
+python3 "$CLAUDE_PLUGIN_ROOT/scripts/mp_api.py" check-credentials
+```
+
+It reports each channel as `ok`, `warn`, `expired` or `unconfigured`, naming only missing variable
+*names*. A channel you leave unconfigured is simply skipped, so you can start with one.
+
+### 6. Connect the Amazon Ads MCP server
+
+```bash
+claude mcp add --transport http amazon-ads https://advertising-ai-eu.amazon.com/mcp
+```
+
+See [Amazon Ads MCP server](#amazon-ads-mcp-server-preferred-transport-for-ads) for region choice
+(**EU for amazon.in**, not FE) and the prerequisite Ads API developer application. Skip this and the
+`amazon-ads` skill falls back to the HTTP path, which still works.
+
+### 7. Configure image hosting — only if you want image A/B testing
+
+Amazon's crawler fetches images from a public URL; there is no upload endpoint. See
+[Not yet wired: image hosting](#not-yet-wired-image-hosting). **This step is not implemented for
+you** — until you wire it, the image pipeline stops at the hosting gate and records a blocker
+instead of pretending to succeed. Ads and pricing work fine without it.
+
+### 8. Dry-run a full cycle — do not skip this
+
+```
+/marketplace-agent:marketplace-run --dry-run
+```
+
+Every phase runs, every proposal is produced and reviewed, **nothing is applied**. Read the run
+report end to end and confirm the bid changes it *would* make are ones you would make yourself.
+This is the last checkpoint before the agent spends real money, and nothing in this plugin has ever
+run against a live account — see [Known gaps](#known-gaps-read-before-trusting-this-in-production).
+
+### 9. Go live
+
+```
+/marketplace-agent:marketplace-run
+```
+
+Two things to know before you walk away:
+
+- **Kill switch.** `touch HALT` at your project root and every script refuses to run. Delete the
+  file to resume. Put a reason in it; it shows up in the report.
+- **Undo.** `/marketplace-agent:marketplace-rollback` reverts a run using the `before` values in
+  `analytics/audit/`. Every applied change records one, so rollback is mechanical.
+
+For unattended operation, run step 9 on a schedule. The lock prevents overlapping runs, cooldowns
+prevent the same entity being adjusted repeatedly, and `HALT` stops everything.
 
 ## Amazon Ads MCP server (preferred transport for ads)
 

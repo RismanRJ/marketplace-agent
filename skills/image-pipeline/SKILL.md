@@ -25,6 +25,18 @@ tool or a workaround path.
 Use the `ask-gemini` MCP server, tool `mcp__ask-gemini__generate_image`, to produce variants into
 `assets/generated/`. Naming: `<sku>_variant_<letter>.<ext>` (e.g. `SKU123_variant_a.jpg`).
 
+**Quota is a hard stop, not something to retry around.** Gemini image models are not available on
+the free tier — an unbilled key returns HTTP 429 with `limit: 0` and a `FreeTier` quota id. That is
+a billing state, not congestion, so retrying will never clear it. On any 429 from
+`generate_image`, distinguish the two cases by the reported limit:
+
+- `limit: 0` → billing is not enabled. Record a blocker naming that, skip image work for the whole
+  run, and continue with ads and pricing. Do not retry.
+- a non-zero limit with a `retryDelay` → genuine rate limiting. Wait the stated delay, retry once,
+  then record a blocker and move on.
+
+Never loop on quota errors; each attempt costs and none will succeed.
+
 Prompt patterns aimed at CTR, pick per slot:
 - **Contrasting studio lighting** — product on seamless white, single dramatic key light plus fill,
   strong shadow falloff to make the product pop without changing its actual colour.

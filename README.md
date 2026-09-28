@@ -77,12 +77,39 @@ See [Amazon Ads MCP server](#amazon-ads-mcp-server-preferred-transport-for-ads) 
 (**EU for amazon.in**, not FE) and the prerequisite Ads API developer application. Skip this and the
 `amazon-ads` skill falls back to the HTTP path, which still works.
 
-### 7. Configure image hosting — only if you want image A/B testing
+### 7. Image A/B testing — optional, two separate prerequisites
 
-Amazon's crawler fetches images from a public URL; there is no upload endpoint. See
-[Not yet wired: image hosting](#not-yet-wired-image-hosting). **This step is not implemented for
-you** — until you wire it, the image pipeline stops at the hosting gate and records a blocker
-instead of pretending to succeed. Ads and pricing work fine without it.
+Skip this whole step if you only want ads and pricing; both work fine without it. The image
+pipeline needs **generation** and **hosting**, and they fail independently.
+
+**7a. Image generation — needs a *billed* Gemini key.** The pipeline generates variants through the
+`ask-gemini` MCP server (`mcp__ask-gemini__generate_image`). Connect it if you have not:
+
+```bash
+claude mcp add --transport http ask-gemini <your-ask-gemini-endpoint>
+claude mcp list          # expect ask-gemini to appear
+```
+
+**Gemini image models are not on the free tier.** An unbilled key returns HTTP 429 with
+`limit: 0` and a `FreeTier` quota id — zero allowance, not exhausted allowance, so no amount of
+waiting or retrying clears it:
+
+```
+Quota exceeded ... limit: 0, model: gemini-2.5-flash-preview-image
+quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier
+```
+
+Enable billing on the Google Cloud project behind the key at
+[aistudio.google.com](https://aistudio.google.com) → the project's API key → link a billing
+account. Verify with one generation before relying on it. The pipeline treats `limit: 0` as a hard
+stop: it records a blocker and continues with ads and pricing rather than looping on a quota error.
+
+**7b. Image hosting — not implemented for you.** Amazon's crawler fetches images from a public URL;
+there is no upload endpoint. See [Not yet wired: image hosting](#not-yet-wired-image-hosting).
+Until you wire it, the pipeline stops at the hosting gate and records a blocker instead of
+pretending to succeed.
+
+Both must be working for image A/B testing to complete end to end.
 
 ### 8. Dry-run a full cycle — do not skip this
 
